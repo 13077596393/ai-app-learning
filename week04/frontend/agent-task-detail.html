@@ -1,0 +1,986 @@
+<!DOCTYPE html> <!-- 声明当前文件是 HTML5 页面 -->
+<html lang="zh-CN"> <!-- 设置页面语言为中文 -->
+<head> <!-- 页面头部开始 -->
+    <meta charset="UTF-8" /> <!-- 设置页面编码，避免中文乱码 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /> <!-- 设置移动端自适应 -->
+    <title>Agent 任务详情</title> <!-- 设置浏览器标签页标题 -->
+
+    <script src="https://cdn.tailwindcss.com"></script> <!-- 引入 Tailwind CSS 样式框架 -->
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script> <!-- 引入 Alpine.js -->
+</head> <!-- 页面头部结束 -->
+
+<body class="bg-slate-100 text-slate-900"> <!-- 页面主体开始，设置背景和文字颜色 -->
+
+    <main
+        class="min-h-screen px-6 py-8"
+        x-data="agentTaskDetailPage()"
+        x-init="initPage()"
+    > <!-- 页面主区域，绑定 Alpine.js 数据和初始化函数 -->
+
+        <section class="mx-auto max-w-6xl space-y-6"> <!-- 内容容器，控制页面宽度 -->
+
+            <header class="rounded-2xl bg-white p-6 shadow-sm"> <!-- 顶部标题卡片 -->
+                <p class="text-sm font-medium text-blue-600">AI Agent 工作流</p> <!-- 页面小标题 -->
+                <h1 class="mt-2 text-3xl font-bold">Agent 任务详情</h1> <!-- 页面主标题 -->
+                <p class="mt-2 text-sm text-slate-500">查看任务状态、用户输入、知识库 ID 和任务时间。</p> <!-- 页面说明 -->
+                <div class="mt-4 flex flex-wrap items-center gap-3 text-sm"> <!-- 轮询状态区域开始 -->
+                    <span class="rounded-full bg-slate-100 px-3 py-1 text-slate-600"> <!-- 自动刷新状态标签开始 -->
+                        自动刷新：
+                        <span x-text="autoPolling ? '开启' : '关闭'"></span> <!-- 显示是否开启自动刷新 -->
+                    </span> <!-- 自动刷新状态标签结束 -->
+                
+                    <span class="rounded-full bg-slate-100 px-3 py-1 text-slate-600"> <!-- 刷新间隔标签开始 -->
+                        间隔：
+                        <span x-text="pollIntervalMs / 1000"></span> 秒 <!-- 显示轮询间隔 -->
+                    </span> <!-- 刷新间隔标签结束 -->
+                
+                    <button type="button" class="rounded-full bg-blue-50 px-3 py-1 font-medium text-blue-600 hover:bg-blue-100"
+                        x-on:click="loadTaskDetail()"> <!-- 手动刷新按钮开始 -->
+                        手动刷新 <!-- 按钮文字 -->
+                    </button> <!-- 手动刷新按钮结束 -->
+                
+                    <button type="button" class="rounded-full bg-slate-50 px-3 py-1 font-medium text-slate-600 hover:bg-slate-100"
+                        x-on:click="autoPolling = !autoPolling"> <!-- 开关自动刷新按钮开始 -->
+                        <span x-text="autoPolling ? '关闭自动刷新' : '开启自动刷新'"></span> <!-- 按钮文字 -->
+                    </button> <!-- 开关自动刷新按钮结束 -->
+                </div> <!-- 轮询状态区域结束 -->
+            </header> <!-- 顶部标题卡片结束 -->
+
+            <section class="rounded-2xl bg-white p-6 shadow-sm"> <!-- 任务基础信息卡片开始 -->
+
+                <div class="flex items-center justify-between gap-4"> <!-- 标题和按钮区域 -->
+                    <div> <!-- 左侧标题区域 -->
+                        <h2 class="text-xl font-semibold">任务基础信息</h2> <!-- 模块标题 -->
+                        <p class="mt-1 text-sm text-slate-500">当前 task_id：<span x-text="taskId || '未读取到'"></span></p> <!-- 显示当前任务 ID -->
+                    </div> <!-- 左侧标题区域结束 -->
+
+                    <button
+                        class="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                        type="button"
+                        x-on:click="loadTaskDetail()"
+                        x-bind:disabled="loading || !taskId"
+                    > <!-- 刷新按钮开始 -->
+                        <span x-show="!loading">刷新任务详情</span> <!-- 非加载状态显示 -->
+                        <span x-show="loading">加载中...</span> <!-- 加载状态显示 -->
+                    </button> <!-- 刷新按钮结束 -->
+                </div> <!-- 标题和按钮区域结束 -->
+
+                <div
+                    class="mt-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+                    x-show="error"
+                    x-text="error"
+                ></div> <!-- 错误提示区域，有错误时显示 -->
+
+                <div
+                    class="mt-5 rounded-xl border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-700"
+                    x-show="!loading && !task && !error"
+                > <!-- 没有任务数据时显示 -->
+                    请在地址栏加上 task_id，例如：/frontend/agent-task-detail.html?task_id=12
+                </div> <!-- 空状态提示结束 -->
+
+                <div class="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2" x-show="task"> <!-- 任务信息网格开始 -->
+
+                    <div class="rounded-xl bg-slate-50 p-4"> <!-- 任务 ID 信息块 -->
+                        <p class="text-sm text-slate-500">任务 ID</p> <!-- 字段名称 -->
+                        <p class="mt-1 font-semibold" x-text="task?.id || '-'"></p> <!-- 字段值 -->
+                    </div> <!-- 任务 ID 信息块结束 -->
+
+                    <div class="rounded-xl bg-slate-50 p-4"> <!-- 任务类型信息块 -->
+                        <p class="text-sm text-slate-500">任务类型</p> <!-- 字段名称 -->
+                        <p class="mt-1 font-semibold" x-text="task?.task_type || '-'"></p> <!-- 字段值 -->
+                    </div> <!-- 任务类型信息块结束 -->
+
+                    <div class="rounded-xl bg-slate-50 p-4"> <!-- 任务状态信息块 -->
+                        <p class="text-sm text-slate-500">任务状态</p> <!-- 字段名称 -->
+                        <p class="mt-1 font-semibold" x-text="task?.status || '-'"></p> <!-- 字段值 -->
+                    </div> <!-- 任务状态信息块结束 -->
+
+                    <div class="rounded-xl bg-slate-50 p-4"> <!-- 知识库 ID 信息块 -->
+                        <p class="text-sm text-slate-500">知识库 ID</p> <!-- 字段名称 -->
+                        <p class="mt-1 font-semibold" x-text="task?.knowledge_base_id ?? '-'"></p> <!-- 字段值 -->
+                    </div> <!-- 知识库 ID 信息块结束 -->
+
+                    <div class="rounded-xl bg-slate-50 p-4"> <!-- 会话 ID 信息块 -->
+                        <p class="text-sm text-slate-500">会话 ID</p> <!-- 字段名称 -->
+                        <p class="mt-1 font-semibold" x-text="task?.session_id ?? '-'"></p> <!-- 字段值 -->
+                    </div> <!-- 会话 ID 信息块结束 -->
+
+                    <div class="rounded-xl bg-slate-50 p-4"> <!-- 创建时间信息块 -->
+                        <p class="text-sm text-slate-500">创建时间</p> <!-- 字段名称 -->
+                        <p class="mt-1 font-semibold" x-text="formatTime(task?.created_at)"></p> <!-- 字段值 -->
+                    </div> <!-- 创建时间信息块结束 -->
+
+                </div> <!-- 任务信息网格结束 -->
+
+                <div class="mt-5 rounded-xl bg-slate-50 p-4" x-show="task"> <!-- 用户输入区域开始 -->
+                    <p class="text-sm text-slate-500">用户输入</p> <!-- 字段名称 -->
+                    <p class="mt-2 leading-7" x-text="task?.user_input || '-'"></p> <!-- 用户输入内容 -->
+                </div> <!-- 用户输入区域结束 -->
+
+            </section> <!-- 任务基础信息卡片结束 -->
+
+            <section class="rounded-2xl bg-white p-6 shadow-sm"> <!-- 工具调用记录卡片开始 -->
+                <div class="flex items-center justify-between gap-4"> <!-- 标题和数量区域开始 -->
+                    <div> <!-- 左侧标题文字区域开始 -->
+                        <h2 class="text-xl font-semibold">工具调用记录</h2> <!-- 模块标题 -->
+                        <p class="mt-1 text-sm text-slate-500">展示 Agent 执行过程中调用过的工具，例如知识库检索、保存报告、导出 Markdown。</p> <!-- 模块说明文字 -->
+                    </div> <!-- 左侧标题文字区域结束 -->
+            
+                    <span class="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-600"> <!-- 工具调用数量标签开始 -->
+                        共 <span x-text="toolCalls.length"></span> 次 <!-- 动态显示工具调用数量 -->
+                    </span> <!-- 工具调用数量标签结束 -->
+                </div> <!-- 标题和数量区域结束 -->
+            
+                <div class="mt-5 rounded-xl border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-700"
+                    x-show="!loading && toolCalls.length === 0"> <!-- 没有工具调用记录时显示提示 -->
+                    当前任务还没有工具调用记录，或者 trace 接口暂时没有返回 tool_calls。
+                </div> <!-- 空状态提示结束 -->
+            
+                <div class="mt-5 overflow-hidden rounded-xl border border-slate-200" x-show="toolCalls.length > 0">
+                    <!-- 工具调用表格外层容器开始 -->
+                    <table class="w-full text-left text-sm"> <!-- 工具调用表格开始 -->
+                        <thead class="bg-slate-50 text-slate-500"> <!-- 表头开始 -->
+                            <tr> <!-- 表头行开始 -->
+                                <th class="px-4 py-3">工具名称</th> <!-- 工具名称列 -->
+                                <th class="px-4 py-3">所属步骤</th> <!-- 所属步骤列 -->
+                                <th class="px-4 py-3">状态</th> <!-- 状态列 -->
+                                <th class="px-4 py-3">耗时</th> <!-- 耗时列 -->
+                                <th class="px-4 py-3">错误</th> <!-- 错误列 -->
+                            </tr> <!-- 表头行结束 -->
+                        </thead> <!-- 表头结束 -->
+            
+                        <tbody class="divide-y divide-slate-200"> <!-- 表格内容开始 -->
+                            <template x-for="call in toolCalls" x-bind:key="call.id || `${call.tool_name}-${Math.random()}`">
+                                <!-- 循环渲染每一条工具调用记录 -->
+                                <tr> <!-- 单条工具调用记录行开始 -->
+                                    <td class="px-4 py-3 align-top"> <!-- 工具名称单元格开始 -->
+                                        <p class="font-medium text-slate-900" x-text="call.tool_name || '-'"></p> <!-- 显示工具名称 -->
+                                        <details class="mt-2"> <!-- 工具输入输出折叠区域开始 -->
+                                            <summary class="cursor-pointer text-xs font-medium text-blue-600">查看输入 / 输出</summary>
+                                            <!-- 折叠按钮文字 -->
+            
+                                            <div class="mt-3 space-y-3"> <!-- 输入输出内容区域开始 -->
+                                                <div> <!-- 工具输入区域开始 -->
+                                                    <p class="text-xs font-semibold text-slate-500">tool_input</p> <!-- 工具输入标题 -->
+                                                    <pre class="mt-1 max-h-48 overflow-auto rounded-lg bg-slate-900 p-3 text-xs text-slate-100"
+                                                        x-text="formatJson(call.tool_input)"></pre> <!-- 工具输入 JSON -->
+                                                </div> <!-- 工具输入区域结束 -->
+            
+                                                <div> <!-- 工具输出区域开始 -->
+                                                    <p class="text-xs font-semibold text-slate-500">tool_output</p> <!-- 工具输出标题 -->
+                                                    <pre class="mt-1 max-h-48 overflow-auto rounded-lg bg-slate-900 p-3 text-xs text-slate-100"
+                                                        x-text="formatJson(call.tool_output)"></pre> <!-- 工具输出 JSON -->
+                                                </div> <!-- 工具输出区域结束 -->
+                                            </div> <!-- 输入输出内容区域结束 -->
+                                        </details> <!-- 工具输入输出折叠区域结束 -->
+                                    </td> <!-- 工具名称单元格结束 -->
+            
+                                    <td class="px-4 py-3 align-top text-slate-600"> <!-- 所属步骤单元格开始 -->
+                                        <p x-text="getStepTitle(call.step_name)"></p> <!-- 显示所属步骤中文名 -->
+                                        <p class="mt-1 text-xs text-slate-400" x-text="call.step_name || '-'"></p>
+                                        <!-- 显示所属步骤原始名称 -->
+                                    </td> <!-- 所属步骤单元格结束 -->
+            
+                                    <td class="px-4 py-3 align-top"> <!-- 状态单元格开始 -->
+                                        <span class="rounded-full px-2 py-0.5 text-xs font-medium"
+                                            x-bind:class="getStatusBadgeClass(call.status)" x-text="call.status || '-'"></span>
+                                        <!-- 工具调用状态标签 -->
+                                    </td> <!-- 状态单元格结束 -->
+            
+                                    <td class="px-4 py-3 align-top text-slate-600"> <!-- 耗时单元格开始 -->
+                                        <span x-text="formatLatency(call.latency_ms)"></span> <!-- 显示工具调用耗时 -->
+                                    </td> <!-- 耗时单元格结束 -->
+            
+                                    <td class="px-4 py-3 align-top"> <!-- 错误信息单元格开始 -->
+                                        <span class="text-slate-400" x-show="!call.error">无</span> <!-- 没有错误时显示无 -->
+                                        <span class="text-red-600" x-show="call.error" x-text="call.error"></span>
+                                        <!-- 有错误时显示错误信息 -->
+                                    </td> <!-- 错误信息单元格结束 -->
+                                </tr> <!-- 单条工具调用记录行结束 -->
+                            </template> <!-- 循环结束 -->
+                        </tbody> <!-- 表格内容结束 -->
+                    </table> <!-- 工具调用表格结束 -->
+                </div> <!-- 工具调用表格外层容器结束 -->
+            </section> <!-- 工具调用记录卡片结束 -->
+
+            <section class="rounded-2xl bg-white p-6 shadow-sm"> <!-- LLM 调用记录卡片开始 -->
+                <div class="flex items-center justify-between gap-4"> <!-- 标题和数量区域开始 -->
+                    <div> <!-- 左侧标题区域开始 -->
+                        <h2 class="text-xl font-semibold">LLM 调用记录</h2> <!-- 模块标题 -->
+                        <p class="mt-1 text-sm text-slate-500">展示 Agent 执行过程中调用大模型的记录，例如生成报告草稿。</p> <!-- 模块说明 -->
+                    </div> <!-- 左侧标题区域结束 -->
+            
+                    <span class="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-600"> <!-- 数量标签开始 -->
+                        共 <span x-text="llmCalls.length"></span> 次 <!-- 动态显示 LLM 调用次数 -->
+                    </span> <!-- 数量标签结束 -->
+                </div> <!-- 标题和数量区域结束 -->
+            
+                <div class="mt-5 rounded-xl border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-700"
+                    x-show="!loading && llmCalls.length === 0"> <!-- 没有 LLM 调用记录时显示 -->
+                    当前任务还没有 LLM 调用记录，或者 trace 接口暂时没有返回 llm_calls。
+                </div> <!-- 空状态结束 -->
+            
+                <div class="mt-5 overflow-hidden rounded-xl border border-slate-200" x-show="llmCalls.length > 0"> <!-- 表格外层容器开始 -->
+                    <table class="w-full text-left text-sm"> <!-- LLM 调用表格开始 -->
+                        <thead class="bg-slate-50 text-slate-500"> <!-- 表头开始 -->
+                            <tr> <!-- 表头行开始 -->
+                                <th class="px-4 py-3">Prompt 名称</th> <!-- prompt 名称列 -->
+                                <th class="px-4 py-3">所属步骤</th> <!-- 所属步骤列 -->
+                                <th class="px-4 py-3">模型</th> <!-- 模型列 -->
+                                <th class="px-4 py-3">状态</th> <!-- 状态列 -->
+                                <th class="px-4 py-3">耗时</th> <!-- 耗时列 -->
+                                <th class="px-4 py-3">Tokens</th> <!-- token 数列 -->
+                            </tr> <!-- 表头行结束 -->
+                        </thead> <!-- 表头结束 -->
+            
+                        <tbody class="divide-y divide-slate-200"> <!-- 表格内容开始 -->
+                            <template x-for="call in llmCalls" x-bind:key="call.id || `${call.prompt_name}-${Math.random()}`">
+                                <!-- 循环 LLM 调用记录 -->
+                                <tr> <!-- 单条 LLM 调用行开始 -->
+                                    <td class="px-4 py-3 align-top"> <!-- prompt 名称单元格开始 -->
+                                        <p class="font-medium text-slate-900" x-text="call.prompt_name || '-'"></p>
+                                        <!-- 显示 prompt 名称 -->
+                                        <p class="mt-1 text-xs text-slate-400" x-text="call.prompt_version || '-'"></p>
+                                        <!-- 显示 prompt 版本 -->
+            
+                                        <details class="mt-2"> <!-- prompt 和 response 折叠区开始 -->
+                                            <summary class="cursor-pointer text-xs font-medium text-blue-600">查看 prompt / response
+                                            </summary> <!-- 折叠标题 -->
+            
+                                            <div class="mt-3 space-y-3"> <!-- 内容区域开始 -->
+                                                <div> <!-- prompt 区域开始 -->
+                                                    <p class="text-xs font-semibold text-slate-500">prompt</p> <!-- prompt 标题 -->
+                                                    <pre class="mt-1 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-900 p-3 text-xs text-slate-100"
+                                                        x-text="call.prompt || '-'"></pre> <!-- prompt 内容 -->
+                                                </div> <!-- prompt 区域结束 -->
+            
+                                                <div> <!-- response 区域开始 -->
+                                                    <p class="text-xs font-semibold text-slate-500">response</p>
+                                                    <!-- response 标题 -->
+                                                    <pre class="mt-1 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-900 p-3 text-xs text-slate-100"
+                                                        x-text="call.response || '-'"></pre> <!-- response 内容 -->
+                                                </div> <!-- response 区域结束 -->
+                                            </div> <!-- 内容区域结束 -->
+                                        </details> <!-- prompt 和 response 折叠区结束 -->
+                                    </td> <!-- prompt 名称单元格结束 -->
+            
+                                    <td class="px-4 py-3 align-top text-slate-600"> <!-- 所属步骤单元格开始 -->
+                                        <p x-text="getStepTitle(call.step_name)"></p> <!-- 显示步骤中文名 -->
+                                        <p class="mt-1 text-xs text-slate-400" x-text="call.step_name || '-'"></p> <!-- 显示步骤原始名 -->
+                                    </td> <!-- 所属步骤单元格结束 -->
+            
+                                    <td class="px-4 py-3 align-top text-slate-600" x-text="call.model_name || '-'"></td>
+                                    <!-- 显示模型名称 -->
+            
+                                    <td class="px-4 py-3 align-top"> <!-- 状态单元格开始 -->
+                                        <span class="rounded-full px-2 py-0.5 text-xs font-medium"
+                                            x-bind:class="getStatusBadgeClass(call.status)" x-text="call.status || '-'"></span>
+                                        <!-- 状态标签 -->
+                                        <p class="mt-2 text-xs text-red-600" x-show="call.error" x-text="call.error"></p>
+                                        <!-- 错误信息 -->
+                                    </td> <!-- 状态单元格结束 -->
+            
+                                    <td class="px-4 py-3 align-top text-slate-600" x-text="formatLatency(call.latency_ms)"></td>
+                                    <!-- 显示耗时 -->
+            
+                                    <td class="px-4 py-3 align-top text-slate-600"> <!-- token 单元格开始 -->
+                                        <p>输入：<span x-text="call.input_tokens ?? '-'"></span></p> <!-- 输入 token -->
+                                        <p>输出：<span x-text="call.output_tokens ?? '-'"></span></p> <!-- 输出 token -->
+                                        <p>总计：<span x-text="call.total_tokens ?? '-'"></span></p> <!-- 总 token -->
+                                    </td> <!-- token 单元格结束 -->
+                                </tr> <!-- 单条 LLM 调用行结束 -->
+                            </template> <!-- 循环结束 -->
+                        </tbody> <!-- 表格内容结束 -->
+                    </table> <!-- LLM 调用表格结束 -->
+                </div> <!-- 表格外层容器结束 -->
+            </section> <!-- LLM 调用记录卡片结束 -->
+
+            <section class="rounded-2xl bg-white p-6 shadow-sm"> <!-- RAG 检索记录卡片开始 -->
+                <div class="flex items-center justify-between gap-4"> <!-- 标题和数量区域开始 -->
+                    <div> <!-- 左侧标题区域开始 -->
+                        <h2 class="text-xl font-semibold">RAG 检索记录</h2> <!-- 模块标题 -->
+                        <p class="mt-1 text-sm text-slate-500">展示知识库检索 query、命中数量、chunk ID 和分数。</p> <!-- 模块说明 -->
+                    </div> <!-- 左侧标题区域结束 -->
+            
+                    <span class="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-600"> <!-- 数量标签开始 -->
+                        共 <span x-text="ragLogs.length"></span> 次 <!-- 动态显示 RAG 检索次数 -->
+                    </span> <!-- 数量标签结束 -->
+                </div> <!-- 标题和数量区域结束 -->
+            
+                <div class="mt-5 rounded-xl border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-700"
+                    x-show="!loading && ragLogs.length === 0"> <!-- 没有 RAG 检索记录时显示 -->
+                    当前任务还没有 RAG 检索记录，或者 trace 接口暂时没有返回 rag_retrieval_logs。
+                </div> <!-- 空状态结束 -->
+            
+                <div class="mt-5 space-y-4" x-show="ragLogs.length > 0"> <!-- RAG 日志列表开始 -->
+                    <template x-for="log in ragLogs" x-bind:key="log.id || `${log.query}-${Math.random()}`"> <!-- 循环 RAG 检索日志 -->
+                        <div class="rounded-xl border border-slate-200 p-4"> <!-- 单条 RAG 日志卡片开始 -->
+                            <div class="flex flex-wrap items-center justify-between gap-3"> <!-- 顶部信息区域开始 -->
+                                <div> <!-- 左侧信息开始 -->
+                                    <p class="font-semibold text-slate-900">知识库 ID：<span
+                                            x-text="log.knowledge_base_id ?? '-'"></span></p> <!-- 显示知识库 ID -->
+                                    <p class="mt-1 text-sm text-slate-500">所属步骤：<span x-text="getStepTitle(log.step_name)"></span>
+                                    </p> <!-- 显示所属步骤 -->
+                                </div> <!-- 左侧信息结束 -->
+            
+                                <span class="rounded-full px-2 py-0.5 text-xs font-medium"
+                                    x-bind:class="getStatusBadgeClass(log.status)" x-text="log.status || '-'"></span> <!-- 状态标签 -->
+                            </div> <!-- 顶部信息区域结束 -->
+            
+                            <div class="mt-4 rounded-xl bg-slate-50 p-4"> <!-- query 区域开始 -->
+                                <p class="text-sm text-slate-500">检索 Query</p> <!-- query 标题 -->
+                                <p class="mt-2 leading-7" x-text="log.query || '-'"></p> <!-- 显示 query -->
+                            </div> <!-- query 区域结束 -->
+            
+                            <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3"> <!-- 统计信息网格开始 -->
+                                <div class="rounded-xl bg-slate-50 p-4"> <!-- top_k 信息块开始 -->
+                                    <p class="text-sm text-slate-500">top_k</p> <!-- 字段名 -->
+                                    <p class="mt-1 font-semibold" x-text="log.top_k ?? '-'"></p> <!-- 字段值 -->
+                                </div> <!-- top_k 信息块结束 -->
+            
+                                <div class="rounded-xl bg-slate-50 p-4"> <!-- retrieved_count 信息块开始 -->
+                                    <p class="text-sm text-slate-500">命中数量</p> <!-- 字段名 -->
+                                    <p class="mt-1 font-semibold" x-text="log.retrieved_count ?? '-'"></p> <!-- 字段值 -->
+                                </div> <!-- retrieved_count 信息块结束 -->
+            
+                                <div class="rounded-xl bg-slate-50 p-4"> <!-- latency_ms 信息块开始 -->
+                                    <p class="text-sm text-slate-500">耗时</p> <!-- 字段名 -->
+                                    <p class="mt-1 font-semibold" x-text="formatLatency(log.latency_ms)"></p> <!-- 字段值 -->
+                                </div> <!-- latency_ms 信息块结束 -->
+                            </div> <!-- 统计信息网格结束 -->
+            
+                            <details class="mt-4 rounded-xl bg-slate-50 p-4 text-sm"> <!-- 检索详情折叠区开始 -->
+                                <summary class="cursor-pointer font-medium text-blue-600">查看 chunk IDs / scores / context</summary>
+                                <!-- 折叠标题 -->
+            
+                                <div class="mt-3 space-y-3"> <!-- 详情内容区域开始 -->
+                                    <div> <!-- chunk ID 区域开始 -->
+                                        <p class="text-xs font-semibold text-slate-500">matched_chunk_ids</p> <!-- 标题 -->
+                                        <pre class="mt-1 max-h-40 overflow-auto rounded-lg bg-slate-900 p-3 text-xs text-slate-100"
+                                            x-text="formatJson(log.matched_chunk_ids)"></pre> <!-- chunk ID 内容 -->
+                                    </div> <!-- chunk ID 区域结束 -->
+            
+                                    <div> <!-- scores 区域开始 -->
+                                        <p class="text-xs font-semibold text-slate-500">scores</p> <!-- 标题 -->
+                                        <pre class="mt-1 max-h-40 overflow-auto rounded-lg bg-slate-900 p-3 text-xs text-slate-100"
+                                            x-text="formatJson(log.scores)"></pre> <!-- scores 内容 -->
+                                    </div> <!-- scores 区域结束 -->
+            
+                                    <div> <!-- context 区域开始 -->
+                                        <p class="text-xs font-semibold text-slate-500">context</p> <!-- 标题 -->
+                                        <pre class="mt-1 max-h-56 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-900 p-3 text-xs text-slate-100"
+                                            x-text="log.context || '-'"></pre> <!-- context 内容 -->
+                                    </div> <!-- context 区域结束 -->
+                                </div> <!-- 详情内容区域结束 -->
+                            </details> <!-- 检索详情折叠区结束 -->
+                        </div> <!-- 单条 RAG 日志卡片结束 -->
+                    </template> <!-- 循环结束 -->
+                </div> <!-- RAG 日志列表结束 -->
+            </section> <!-- RAG 检索记录卡片结束 -->
+
+
+            <section class="rounded-2xl bg-white p-6 shadow-sm"> <!-- 报告预览卡片开始 -->
+                <div class="flex items-center justify-between gap-4"> <!-- 标题和状态区域开始 -->
+                    <div> <!-- 标题文字区域开始 -->
+                        <h2 class="text-xl font-semibold">报告预览</h2> <!-- 模块标题 -->
+                        <p class="mt-1 text-sm text-slate-500">展示生成后的报告草稿或正式报告内容。</p> <!-- 模块说明 -->
+                    </div> <!-- 标题文字区域结束 -->
+            
+                    <span class="rounded-full px-3 py-1 text-sm font-medium" x-bind:class="getStatusBadgeClass(task?.status)"
+                        x-text="task?.status || '-'"></span> <!-- 动态任务状态标签 -->
+                </div> <!-- 标题和状态区域结束 -->
+            
+                <div class="mt-5 rounded-xl border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-700"
+                    x-show="!loading && (!report || !report.report_content)"> <!-- 没有报告内容时显示提示 -->
+                    当前任务还没有报告内容。请确认任务是否已经生成报告草稿。
+                </div> <!-- 空报告提示结束 -->
+            
+                <div class="mt-5 rounded-xl bg-slate-50 p-4" x-show="report && report.report_content"> <!-- 报告内容区域开始 -->
+                    <h3 class="font-semibold" x-text="report?.report_title || '知识库学习报告'"></h3> <!-- 动态显示报告标题 -->
+            
+                    <pre class="mt-4 max-h-[520px] overflow-auto whitespace-pre-wrap rounded-xl bg-white p-4 text-sm leading-7 text-slate-700"
+                        x-text="report?.report_content || ''"></pre> <!-- 动态显示报告正文，并保留 Markdown 换行 -->
+                </div> <!-- 报告内容区域结束 -->
+            </section> <!-- 报告预览卡片结束 -->
+            
+            <section class="rounded-2xl bg-white p-6 shadow-sm"> <!-- 人工确认卡片开始 -->
+                <h2 class="text-xl font-semibold">人工确认</h2> <!-- 模块标题 -->
+            
+                <p class="mt-2 text-sm leading-6 text-slate-500" x-show="canApprove()"> <!-- 等待确认说明开始 -->
+                    当前报告草稿等待确认。点击按钮后，系统会保存正式报告，并导出 Markdown 文件。
+                </p> <!-- 等待确认说明结束 -->
+            
+                <p class="mt-2 text-sm leading-6 text-slate-500" x-show="task && task.status === 'completed'"> <!-- 已完成说明开始 -->
+                    当前任务已完成，报告已保存或已导出。
+                </p> <!-- 已完成说明结束 -->
+            
+                <p class="mt-2 text-sm leading-6 text-slate-500"
+                    x-show="task && task.status !== 'waiting_approval' && task.status !== 'completed'"> <!-- 其他状态说明开始 -->
+                    当前任务状态暂时不能进行人工确认。
+                </p> <!-- 其他状态说明结束 -->
+            
+                <button
+                    class="mt-5 w-full rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                    type="button" x-show="task && task.status === 'waiting_approval'" x-bind:disabled="approving || !canApprove()"
+                    x-on:click="approveTask()"> <!-- 确认按钮开始 -->
+                    <span x-show="!approving">确认保存并导出 Markdown</span> <!-- 非确认中显示 -->
+                    <span x-show="approving">确认中...</span> <!-- 确认中显示 -->
+                </button> <!-- 确认按钮结束 -->
+            </section> <!-- 人工确认卡片结束 -->
+            
+            <section class="rounded-2xl bg-white p-6 shadow-sm"> <!-- 导出结果卡片开始 -->
+                <h2 class="text-xl font-semibold">导出结果</h2> <!-- 模块标题 -->
+            
+                <p class="mt-2 text-sm text-slate-500">确认完成后，这里会显示正式报告 ID 和 Markdown 文件路径。</p> <!-- 模块说明 -->
+            
+                <div class="mt-4 space-y-3"> <!-- 导出信息列表开始 -->
+                    <div class="rounded-xl bg-slate-50 p-4"> <!-- report_id 展示块开始 -->
+                        <p class="text-sm text-slate-500">报告 ID</p> <!-- 字段名 -->
+                        <p class="mt-1 font-semibold" x-text="report?.report_id ?? '-'"></p> <!-- 动态显示 report_id -->
+                    </div> <!-- report_id 展示块结束 -->
+            
+                    <div class="rounded-xl bg-slate-50 p-4"> <!-- Markdown 文件路径展示块开始 -->
+                        <p class="text-sm text-slate-500">Markdown 文件路径</p> <!-- 字段名 -->
+                        <p class="mt-1 break-all font-semibold" x-text="report?.markdown_file_path || '-'"></p>
+                        <!-- 动态显示 Markdown 文件路径 -->
+                    </div> <!-- Markdown 文件路径展示块结束 -->
+                </div> <!-- 导出信息列表结束 -->
+            </section> <!-- 导出结果卡片结束 -->
+
+
+            <section class="rounded-2xl bg-white p-6 shadow-sm"> <!-- 步骤时间线卡片开始 -->
+                <div class="flex items-center justify-between gap-4"> <!-- 标题区域开始 -->
+                    <div> <!-- 左侧标题文字区域开始 -->
+                        <h2 class="text-xl font-semibold">步骤时间线</h2> <!-- 模块标题 -->
+                        <p class="mt-1 text-sm text-slate-500">展示当前 Agent 任务从开始到完成经过的每一个步骤。</p> <!-- 模块说明文字 -->
+                    </div> <!-- 左侧标题文字区域结束 -->
+            
+                    <span class="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-600"> <!-- 步骤数量标签开始 -->
+                        共 <span x-text="steps.length"></span> 步 <!-- 动态显示步骤数量 -->
+                    </span> <!-- 步骤数量标签结束 -->
+                </div> <!-- 标题区域结束 -->
+            
+                <div class="mt-5 rounded-xl border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-700"
+                    x-show="!loading && steps.length === 0"> <!-- 没有步骤数据时显示提示 -->
+                    当前任务还没有步骤记录，可能任务还没有开始执行，或者后端接口暂时没有返回 steps 字段。
+                </div> <!-- 空步骤提示结束 -->
+            
+                <div class="mt-6 space-y-5" x-show="steps.length > 0"> <!-- 步骤列表开始 -->
+            
+                    <template x-for="step in steps" x-bind:key="step.id"> <!-- 循环渲染每一个步骤 -->
+                        <div class="flex gap-4"> <!-- 单个步骤行开始 -->
+            
+                            <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold"
+                                x-bind:class="getStepIconClass(step.status)" x-text="getStepIcon(step.status)"></div>
+                            <!-- 步骤状态图标，根据状态动态显示颜色和符号 -->
+            
+                            <div class="min-w-0 flex-1"> <!-- 步骤内容区域开始 -->
+                                <div class="flex flex-wrap items-center gap-2"> <!-- 步骤标题和状态标签布局开始 -->
+                                    <p class="font-semibold" x-text="getStepTitle(step.step_name)"></p> <!-- 显示步骤中文标题 -->
+            
+                                    <span class="rounded-full px-2 py-0.5 text-xs font-medium"
+                                        x-bind:class="getStatusBadgeClass(step.status)" x-text="step.status || '-'"></span>
+                                    <!-- 显示步骤状态标签 -->
+                                </div> <!-- 步骤标题和状态标签布局结束 -->
+            
+                                <p class="mt-1 text-sm text-slate-500"> <!-- 步骤技术信息开始 -->
+                                    <span x-text="step.step_name || '-'"></span> <!-- 显示步骤名称 -->
+                                    <span> · </span> <!-- 分隔符 -->
+                                    <span x-text="step.step_type || '-'"></span> <!-- 显示步骤类型 -->
+                                    <span> · </span> <!-- 分隔符 -->
+                                    <span x-text="formatTime(step.created_at)"></span> <!-- 显示步骤创建时间 -->
+                                </p> <!-- 步骤技术信息结束 -->
+            
+                                <details class="mt-3 rounded-xl bg-slate-50 p-3 text-sm"> <!-- 步骤详情折叠区域开始 -->
+                                    <summary class="cursor-pointer font-medium text-slate-600">查看输入 / 输出数据</summary> <!-- 折叠标题 -->
+            
+                                    <div class="mt-3 space-y-3"> <!-- 输入输出区域开始 -->
+                                        <div> <!-- 输入数据区域开始 -->
+                                            <p class="text-xs font-semibold text-slate-500">input_data</p> <!-- 输入数据标题 -->
+                                            <pre class="mt-1 max-h-48 overflow-auto rounded-lg bg-slate-900 p-3 text-xs text-slate-100"
+                                                x-text="formatJson(step.input_data)"></pre> <!-- 输入数据 JSON -->
+                                        </div> <!-- 输入数据区域结束 -->
+            
+                                        <div> <!-- 输出数据区域开始 -->
+                                            <p class="text-xs font-semibold text-slate-500">output_data</p> <!-- 输出数据标题 -->
+                                            <pre class="mt-1 max-h-48 overflow-auto rounded-lg bg-slate-900 p-3 text-xs text-slate-100"
+                                                x-text="formatJson(step.output_data)"></pre> <!-- 输出数据 JSON -->
+                                        </div> <!-- 输出数据区域结束 -->
+                                    </div> <!-- 输入输出区域结束 -->
+                                </details> <!-- 步骤详情折叠区域结束 -->
+                            </div> <!-- 步骤内容区域结束 -->
+            
+                        </div> <!-- 单个步骤行结束 -->
+                    </template> <!-- 循环结束 -->
+            
+                </div> <!-- 步骤列表结束 -->
+            </section> <!-- 步骤时间线卡片结束 -->
+
+        </section> <!-- 内容容器结束 -->
+
+    </main> <!-- 页面主区域结束 -->
+
+    <script> // 页面脚本开始
+        function agentTaskDetailPage() { // 定义 Alpine.js 页面数据函数
+            return { // 返回页面状态对象
+                taskId: null, // 保存当前任务 ID，也就是地址栏里的 task_id
+                task: null, // 保存 /agent/tasks/{task_id} 返回的任务基础信息
+                trace: null, // 保存 /agent/tasks/{task_id}/trace 返回的完整 trace 信息
+                steps: [], // 保存 trace 里的步骤列表，用来渲染步骤时间线
+                toolCalls: [], // 保存所有工具调用记录，用来渲染工具调用表格
+                llmCalls: [], // 保存所有大模型调用记录，用来后面渲染 LLM 调用记录
+                ragLogs: [], // 保存所有 RAG 检索日志，用来后面渲染 RAG 检索记录
+                report: null, // 保存报告相关信息，用来渲染报告预览
+                pollTimer: null, // 保存轮询定时器 ID，用来后面停止轮询
+
+                pollIntervalMs: 5000, // 设置轮询间隔，单位毫秒，这里表示每 5 秒刷新一次
+
+                autoPolling: true, // 是否开启自动轮询
+                unlinkedLogs: { // 保存没有绑定 step_id 的日志
+                    llm_calls: [], // 保存未绑定步骤的大模型调用日志
+                    tool_calls: [], // 保存未绑定步骤的工具调用日志
+                    rag_retrieval_logs: [], // 保存未绑定步骤的 RAG 检索日志
+                }, // unlinkedLogs 结束
+                loading: false, // 保存页面是否正在加载
+                approving: false, // 保存是否正在执行人工确认
+                error: "", // 保存错误提示
+
+                initPage() { // 页面初始化函数
+                    const urlParams = new URLSearchParams(window.location.search); // 读取当前页面地址栏参数
+
+                    this.taskId = urlParams.get("task_id"); // 从地址栏中读取 task_id 参数
+
+                    if (!this.taskId) { // 判断是否没有 task_id
+                        this.error = "地址栏缺少 task_id，请使用 ?task_id=任务ID 访问页面。"; // 设置错误提示
+                        return; // 结束初始化
+                    } // 判断结束
+
+                    this.loadTaskDetail(); // 页面初始化时先加载一次任务详情
+
+                    this.startPolling(); // 页面初始化后启动自动轮询
+                }, // 初始化函数结束
+
+                async loadTaskDetail() { // 定义异步函数，用来同时加载任务基础信息和 trace 信息
+                    this.loading = true; // 设置页面为加载中状态
+                    this.error = ""; // 清空旧错误信息
+
+                    try { // 开始捕获接口请求异常
+                        const taskResponse = await fetch(`/agent/tasks/${this.taskId}`); // 请求任务基础信息接口
+
+                        if (!taskResponse.ok) { // 判断任务基础信息接口是否请求失败
+                            throw new Error(`任务详情请求失败，状态码：${taskResponse.status}`); // 抛出任务接口错误
+                        } // 判断结束
+
+                        const taskData = await taskResponse.json(); // 把任务基础信息接口返回内容转换成 JSON
+
+                        let traceData = {}; // 初始化 traceData，避免 trace 接口失败时页面直接报错
+
+                        try { // 单独捕获 trace 接口错误，避免影响基础任务信息展示
+                            const traceResponse = await fetch(`/agent/tasks/${this.taskId}/trace`); // 请求 trace 接口，获取步骤和日志
+
+                            if (traceResponse.ok) { // 判断 trace 接口是否请求成功
+                                traceData = await traceResponse.json(); // 把 trace 接口返回内容转换成 JSON
+                            } else { // trace 接口返回非 200 时进入这里
+                                console.warn(`trace 接口请求失败，状态码：${traceResponse.status}`); // 在控制台打印 trace 请求失败状态
+                            } // 判断结束
+                        } catch (traceError) { // 捕获 trace 接口异常
+                            console.warn("trace 接口请求失败：", traceError); // 在浏览器控制台打印 trace 请求失败信息
+                        } // trace try 结束
+
+                        this.task = this.normalizeTask(taskData); // 整理任务基础信息，用于渲染任务信息卡片
+                        this.trace = traceData; // 保存完整 trace 数据
+                        this.steps = this.normalizeSteps(traceData); // 从 trace 数据中整理步骤列表
+                        this.toolCalls = this.collectToolCalls(this.steps, traceData); // 从步骤和未绑定日志中提取工具调用记录
+                        this.llmCalls = this.collectLlmCalls(this.steps, traceData); // 从步骤和未绑定日志中提取 LLM 调用记录
+                        this.ragLogs = this.collectRagLogs(this.steps, traceData); // 从步骤和未绑定日志中提取 RAG 检索日志
+                        this.unlinkedLogs = this.normalizeUnlinkedLogs(traceData); // 整理未绑定日志
+                        this.report = this.normalizeReport(taskData, traceData); // 整理报告预览数据
+                    } catch (err) { // 捕获任务基础信息接口异常
+                        this.error = err.message || "加载任务详情失败"; // 保存错误提示
+                    } finally { // 无论成功还是失败都会执行
+                        this.loading = false; // 关闭加载中状态
+                    } // try 结束
+                }, // loadTaskDetail 函数结束
+
+                normalizeTask(data) { // 定义任务数据整理函数
+                    const source = data.task || data; // 兼容两种结构：data.task 或 data 本身
+
+                    return { // 返回统一后的任务对象
+                        id: source.id || source.task_id || this.taskId, // 兼容 id 和 task_id
+                        task_type: source.task_type || "-", // 读取任务类型
+                        status: source.status || source.task_status || "-", // 兼容 status 和 task_status
+                        progress: source.progress ?? null, // 读取任务进度
+                        current_step: source.current_step || "-", // 读取当前步骤说明
+                        user_input: source.user_input || source.message || "-", // 兼容 user_input 和 message
+                        answer: source.answer || "", // 读取任务回答内容
+                        report_id: source.report_id ?? null, // 读取报告 ID
+                        markdown_file_path: source.markdown_file_path || null, // 读取 Markdown 文件路径
+                        job_id: source.job_id || null, // 读取队列任务 job_id
+                        error: source.error || null, // 读取任务错误信息
+                        knowledge_base_id: source.knowledge_base_id ?? null, // 读取知识库 ID
+                        session_id: source.session_id ?? null, // 读取会话 ID
+                        created_at: source.created_at || null, // 读取创建时间
+                        updated_at: source.updated_at || null, // 读取更新时间
+                    }; // 返回对象结束
+                }, // normalizeTask 函数结束
+
+                normalizeSteps(traceData) { // 定义步骤数据整理函数，参数是 trace 接口返回的数据
+                    const rawSteps = traceData.steps || traceData.agent_steps || []; // 兼容 steps 和 agent_steps 两种字段名
+
+                    if (!Array.isArray(rawSteps)) { // 判断后端返回的步骤是否不是数组
+                        return []; // 如果不是数组，返回空数组，避免页面报错
+                    } // 判断结束
+
+                    return rawSteps.map((step) => { // 遍历 trace 返回的每一个步骤
+                        return { // 返回前端统一使用的步骤对象
+                            id: step.id || step.step_id || `${step.step_name}-${Math.random()}`, // 兼容 id 和 step_id，没有就生成临时 key
+                            task_id: step.task_id || this.taskId, // 保存当前步骤所属任务 ID
+                            step_name: step.step_name || step.name || "-", // 兼容 step_name 和 name
+                            step_type: step.step_type || step.type || "-", // 兼容 step_type 和 type
+                            status: step.status || "-", // 保存步骤状态
+                            input_data: step.input_data || {}, // 保存步骤输入数据
+                            output_data: step.output_data || {}, // 保存步骤输出数据
+                            llm_calls: step.llm_calls || [], // 保存当前步骤下的大模型调用日志
+                            tool_calls: step.tool_calls || [], // 保存当前步骤下的工具调用日志
+                            rag_retrieval_logs: step.rag_retrieval_logs || [], // 保存当前步骤下的 RAG 检索日志
+                            created_at: step.created_at || null, // 保存步骤创建时间
+                            updated_at: step.updated_at || null, // 保存步骤更新时间
+                        }; // 返回步骤对象结束
+                    }); // 遍历结束
+                }, // normalizeSteps 函数结束
+
+                normalizeUnlinkedLogs(traceData) { // 定义未绑定日志整理函数
+                    const logs = traceData.unlinked_logs || {}; // 从 trace 数据中读取 unlinked_logs，没有就使用空对象
+
+                    return { // 返回统一格式的未绑定日志对象
+                        llm_calls: logs.llm_calls || [], // 读取未绑定步骤的 LLM 调用日志
+                        tool_calls: logs.tool_calls || [], // 读取未绑定步骤的工具调用日志
+                        rag_retrieval_logs: logs.rag_retrieval_logs || [], // 读取未绑定步骤的 RAG 检索日志
+                    }; // 返回对象结束
+                }, // normalizeUnlinkedLogs 函数结束
+                normalizeReport(taskData, traceData) { // 定义报告数据整理函数
+                    const taskSource = taskData.task || taskData; // 兼容 taskData.task 和 taskData 本身
+
+                    const reportFromTrace = traceData.report || null; // 从 trace 数据中读取 report 信息，如果没有就为 null
+
+                    const approvalStep = this.findApprovalStep(traceData); // 查找等待人工确认步骤
+
+                    const approvalOutput = approvalStep ? (approvalStep.output_data || {}) : {}; // 读取等待确认步骤 output_data
+
+                    return { // 返回统一后的报告对象
+                        report_id: taskSource.report_id ?? reportFromTrace?.report_id ?? null, // 读取正式报告 ID
+                        report_title: approvalOutput.report_title || reportFromTrace?.report_title || "知识库学习报告", // 读取报告标题
+                        report_content: approvalOutput.report_content || reportFromTrace?.report_content || taskSource.answer || "", // 读取报告正文
+                        markdown_file_path: taskSource.markdown_file_path || reportFromTrace?.markdown_file_path || null, // 读取 Markdown 文件路径
+                        approval_required: taskSource.task_status === "waiting_approval" || taskSource.status === "waiting_approval", // 判断是否需要人工确认
+                    }; // 返回报告对象结束
+                }, // normalizeReport 函数结束
+
+                findApprovalStep(traceData) { // 定义查找人工确认步骤的函数
+                    const rawSteps = traceData.steps || traceData.agent_steps || []; // 读取 trace 里的步骤列表
+
+                    if (!Array.isArray(rawSteps)) { // 判断步骤列表是否不是数组
+                        return null; // 如果不是数组，就返回 null
+                    } // 判断结束
+
+                    return rawSteps.find((step) => step.step_name === "wait_for_report_approval") || null; // 查找等待人工确认步骤
+                }, // findApprovalStep 函数结束
+
+                canApprove() { // 定义是否可以点击人工确认按钮的函数
+                    if (!this.task) { // 判断任务信息是否不存在
+                        return false; // 没有任务信息时不能确认
+                    } // 判断结束
+
+                    if (!this.report) { // 判断报告信息是否不存在
+                        return false; // 没有报告信息时不能确认
+                    } // 判断结束
+
+                    if (this.task.status !== "waiting_approval") { // 判断任务状态是否不是等待确认
+                        return false; // 不是等待确认状态就不能确认
+                    } // 判断结束
+
+                    if (!this.report.report_content) { // 判断报告正文是否为空
+                        return false; // 没有报告正文不能确认
+                    } // 判断结束
+
+                    return true; // 满足条件时允许确认
+                }, // canApprove 函数结束
+                collectToolCalls(steps, traceData) { // 定义工具调用收集函数
+                    const result = []; // 初始化工具调用结果数组
+
+                    steps.forEach((step) => { // 遍历每一个步骤
+                        (step.tool_calls || []).forEach((call) => { // 遍历当前步骤下的工具调用
+                            result.push({ // 把工具调用加入结果数组
+                                ...call, // 保留后端返回的工具调用原始字段
+                                step_name: step.step_name, // 补充所属步骤名称
+                                step_status: step.status, // 补充所属步骤状态
+                            }); // push 结束
+                        }); // 当前步骤工具调用遍历结束
+                    }); // 步骤遍历结束
+
+                    const unlinked = (traceData.unlinked_logs && traceData.unlinked_logs.tool_calls) || []; // 读取未绑定步骤的工具调用
+
+                    unlinked.forEach((call) => { // 遍历未绑定工具调用
+                        result.push({ // 加入结果数组
+                            ...call, // 保留原始字段
+                            step_name: "未绑定步骤", // 标记为未绑定步骤
+                            step_status: "-", // 未绑定日志没有步骤状态
+                        }); // push 结束
+                    }); // 未绑定工具调用遍历结束
+
+                    return result; // 返回工具调用列表
+                }, // collectToolCalls 函数结束
+
+                collectLlmCalls(steps, traceData) { // 定义 LLM 调用收集函数
+                    const result = []; // 初始化 LLM 调用结果数组
+
+                    steps.forEach((step) => { // 遍历每一个步骤
+                        (step.llm_calls || []).forEach((call) => { // 遍历当前步骤下的 LLM 调用
+                            result.push({ // 把 LLM 调用加入结果数组
+                                ...call, // 保留后端返回的 LLM 调用原始字段
+                                step_name: step.step_name, // 补充所属步骤名称
+                                step_status: step.status, // 补充所属步骤状态
+                            }); // push 结束
+                        }); // 当前步骤 LLM 调用遍历结束
+                    }); // 步骤遍历结束
+
+                    const unlinked = (traceData.unlinked_logs && traceData.unlinked_logs.llm_calls) || []; // 读取未绑定步骤的 LLM 调用
+
+                    unlinked.forEach((call) => { // 遍历未绑定 LLM 调用
+                        result.push({ // 加入结果数组
+                            ...call, // 保留原始字段
+                            step_name: "未绑定步骤", // 标记为未绑定步骤
+                            step_status: "-", // 未绑定日志没有步骤状态
+                        }); // push 结束
+                    }); // 未绑定 LLM 调用遍历结束
+
+                    return result; // 返回 LLM 调用列表
+                }, // collectLlmCalls 函数结束
+
+                collectRagLogs(steps, traceData) { // 定义 RAG 检索日志收集函数
+                    const result = []; // 初始化 RAG 日志结果数组
+
+                    steps.forEach((step) => { // 遍历每一个步骤
+                        (step.rag_retrieval_logs || []).forEach((log) => { // 遍历当前步骤下的 RAG 检索日志
+                            result.push({ // 把 RAG 日志加入结果数组
+                                ...log, // 保留后端返回的 RAG 日志原始字段
+                                step_name: step.step_name, // 补充所属步骤名称
+                                step_status: step.status, // 补充所属步骤状态
+                            }); // push 结束
+                        }); // 当前步骤 RAG 日志遍历结束
+                    }); // 步骤遍历结束
+
+                    const unlinked = (traceData.unlinked_logs && traceData.unlinked_logs.rag_retrieval_logs) || []; // 读取未绑定步骤的 RAG 日志
+
+                    unlinked.forEach((log) => { // 遍历未绑定 RAG 日志
+                        result.push({ // 加入结果数组
+                            ...log, // 保留原始字段
+                            step_name: "未绑定步骤", // 标记为未绑定步骤
+                            step_status: "-", // 未绑定日志没有步骤状态
+                        }); // push 结束
+                    }); // 未绑定 RAG 日志遍历结束
+
+                    return result; // 返回 RAG 日志列表
+                }, // collectRagLogs 函数结束
+
+                normalizeReport(taskData, traceData) { // 定义报告数据整理函数
+                    const taskSource = taskData.task || taskData; // 兼容 taskData.task 和 taskData 本身
+                    const reportFromTrace = traceData.report || null; // 读取 trace 里可能返回的 report 信息
+                    const approvalStep = this.findApprovalStep(traceData); // 查找等待人工确认步骤
+                    const approvalOutput = approvalStep ? (approvalStep.output_data || {}) : {}; // 读取等待确认步骤的输出数据
+
+                    return { // 返回统一后的报告对象
+                        report_id: taskSource.report_id ?? reportFromTrace?.report_id ?? null, // 读取正式报告 ID
+                        report_title: approvalOutput.report_title || reportFromTrace?.report_title || "知识库学习报告", // 读取报告标题
+                        report_content: approvalOutput.report_content || reportFromTrace?.report_content || taskSource.answer || "", // 读取报告正文或草稿
+                        markdown_file_path: taskSource.markdown_file_path || reportFromTrace?.markdown_file_path || null, // 读取 Markdown 文件路径
+                        approval_required: taskSource.task_status === "waiting_approval" || taskSource.status === "waiting_approval", // 判断是否需要人工确认
+                    }; // 返回报告对象结束
+                }, // normalizeReport 函数结束
+
+                findApprovalStep(traceData) { // 定义查找人工确认步骤的函数
+                    const rawSteps = traceData.steps || traceData.agent_steps || []; // 读取 trace 里的步骤列表
+
+                    if (!Array.isArray(rawSteps)) { // 判断步骤列表是否不是数组
+                        return null; // 如果不是数组，返回 null
+                    } // 判断结束
+
+                    return rawSteps.find((step) => step.step_name === "wait_for_report_approval") || null; // 查找等待人工确认步骤
+                }, // findApprovalStep 函数结束
+
+                async approveTask() { // 定义人工确认函数
+                    if (!this.taskId) { // 判断 task_id 是否为空
+                        this.error = "缺少 task_id，无法确认任务。"; // 设置错误提示
+                        return; // 结束函数
+                    } // 判断结束
+
+                    this.approving = true; // 设置确认中状态
+                    this.error = ""; // 清空旧错误信息
+
+                    try { // 开始捕获确认接口错误
+                        const response = await fetch(`/agent/tasks/${this.taskId}/approve`, { // 请求人工确认接口
+                            method: "POST", // 使用 POST 方法
+                        }); // fetch 结束
+
+                        if (!response.ok) { // 判断确认接口是否失败
+                            const errorText = await response.text(); // 读取后端返回的错误文本
+                            throw new Error(errorText || `确认失败，状态码：${response.status}`); // 抛出错误
+                        } // 判断结束
+
+                        await this.loadTaskDetail(); // 确认成功后重新加载任务详情和 trace
+                        if (this.isFinalStatus()) { // 判断确认后任务是否已经完成
+                            this.stopPolling(); // 如果已经完成，就停止自动轮询
+                        } // 判断结束
+                    } catch (err) { // 捕获确认接口异常
+                        this.error = err.message || "确认任务失败"; // 保存错误提示
+                    } finally { // 无论成功失败都会执行
+                        this.approving = false; // 关闭确认中状态
+                    } // try 结束
+                }, // approveTask 函数结束
+
+                getStepTitle(stepName) { // 定义步骤名称转中文标题函数
+                    const titleMap = { // 定义步骤名称和中文标题的映射表
+                        classify_task: "识别任务类型", // classify_task 对应中文标题
+                        retrieve_knowledge: "检索知识库", // retrieve_knowledge 对应中文标题
+                        retrieve_report_knowledge: "检索报告知识库", // retrieve_report_knowledge 对应中文标题
+                        generate_answer: "生成回答", // generate_answer 对应中文标题
+                        generate_report_draft: "生成报告草稿", // generate_report_draft 对应中文标题
+                        wait_for_report_approval: "等待人工确认", // wait_for_report_approval 对应中文标题
+                        save_report_after_approval: "确认后保存报告", // save_report_after_approval 对应中文标题
+                        export_markdown_after_approval: "确认后导出 Markdown", // export_markdown_after_approval 对应中文标题
+                        save_result: "保存运行结果", // save_result 对应中文标题
+                    }; // 映射表结束
+
+                    return titleMap[stepName] || stepName || "-"; // 如果映射表里有中文标题就返回中文标题，否则返回原始步骤名
+                }, // getStepTitle 函数结束
+
+                getStepIcon(status) { // 定义根据状态返回图标的函数
+                    if (status === "success" || status === "completed") { // 判断是否成功或完成
+                        return "✓"; // 成功状态返回对号
+                    } // 判断结束
+
+                    if (status === "failed" || status === "error") { // 判断是否失败
+                        return "×"; // 失败状态返回叉号
+                    } // 判断结束
+
+                    if (status === "running") { // 判断是否运行中
+                        return "…"; // 运行中返回省略号
+                    } // 判断结束
+
+                    if (status === "waiting_approval") { // 判断是否等待人工确认
+                        return "!"; // 等待确认返回感叹号
+                    } // 判断结束
+
+                    return "•"; // 其他状态返回圆点
+                }, // getStepIcon 函数结束
+
+                getStepIconClass(status) { // 定义根据状态返回图标样式的函数
+                    if (status === "success" || status === "completed") { // 判断是否成功或完成
+                        return "bg-green-100 text-green-700"; // 成功状态使用绿色
+                    } // 判断结束
+
+                    if (status === "failed" || status === "error") { // 判断是否失败
+                        return "bg-red-100 text-red-700"; // 失败状态使用红色
+                    } // 判断结束
+
+                    if (status === "running") { // 判断是否运行中
+                        return "bg-blue-100 text-blue-700"; // 运行中使用蓝色
+                    } // 判断结束
+
+                    if (status === "waiting_approval") { // 判断是否等待人工确认
+                        return "bg-yellow-100 text-yellow-700"; // 等待确认使用黄色
+                    } // 判断结束
+
+                    return "bg-slate-100 text-slate-600"; // 默认状态使用灰色
+                }, // getStepIconClass 函数结束
+
+                getStatusBadgeClass(status) { // 定义状态标签样式函数
+                    if (status === "success" || status === "completed") { // 判断是否成功或完成
+                        return "bg-green-100 text-green-700"; // 成功状态标签使用绿色
+                    } // 判断结束
+
+                    if (status === "failed" || status === "error") { // 判断是否失败
+                        return "bg-red-100 text-red-700"; // 失败状态标签使用红色
+                    } // 判断结束
+
+                    if (status === "running") { // 判断是否运行中
+                        return "bg-blue-100 text-blue-700"; // 运行中状态标签使用蓝色
+                    } // 判断结束
+
+                    if (status === "waiting_approval") { // 判断是否等待人工确认
+                        return "bg-yellow-100 text-yellow-700"; // 等待确认状态标签使用黄色
+                    } // 判断结束
+
+                    return "bg-slate-100 text-slate-600"; // 默认状态标签使用灰色
+                }, // getStatusBadgeClass 函数结束
+
+                formatJson(value) { // 定义 JSON 格式化函数
+                    if (!value) { // 判断数据是否为空
+                        return "{}"; // 空数据返回空对象字符串
+                    } // 判断结束
+
+                    try { // 尝试格式化 JSON
+                        return JSON.stringify(value, null, 2); // 把对象格式化成带缩进的 JSON 字符串
+                    } catch (err) { // 捕获格式化错误
+                        return String(value); // 如果格式化失败，就直接转成字符串
+                    } // try 结束
+                }, // formatJson 函数结束
+                formatLatency(value) { // 定义耗时格式化函数
+                    if (value === null || value === undefined || value === "") { // 判断耗时是否为空
+                        return "-"; // 空耗时返回横线
+                    } // 判断结束
+
+                    return `${value}ms`; // 有耗时时拼接 ms 单位
+                }, // formatLatency 函数结束
+                formatTime(value) { // 定义时间格式化函数
+                    if (!value) { // 判断时间是否为空
+                        return "-"; // 空时间返回横线
+                    } // 判断结束
+
+                    return String(value).replace("T", " ").slice(0, 19); // 把 ISO 时间简单格式化成可读时间
+                }, // formatTime 函数结束
+                startPolling() { // 定义启动轮询函数
+                    if (this.pollTimer) { // 判断是否已经存在轮询定时器
+                        clearInterval(this.pollTimer); // 如果已经存在，就先清除旧定时器
+                    } // 判断结束
+
+                    this.pollTimer = setInterval(() => { // 创建新的定时器，每隔一段时间执行一次
+                        if (!this.autoPolling) { // 判断是否关闭了自动轮询
+                            return; // 如果关闭轮询，就不执行刷新
+                        } // 判断结束
+
+                        if (this.isFinalStatus()) { // 判断任务是否已经进入最终状态
+                            this.stopPolling(); // 如果任务已经结束，就停止轮询
+                            return; // 结束本次定时器逻辑
+                        } // 判断结束
+
+                        this.loadTaskDetail(); // 重新加载任务详情和 trace 信息
+                    }, this.pollIntervalMs); // 使用配置的轮询间隔
+                }, // startPolling 函数结束
+                stopPolling() { // 定义停止轮询函数
+                    if (this.pollTimer) { // 判断当前是否存在轮询定时器
+                        clearInterval(this.pollTimer); // 清除定时器
+                        this.pollTimer = null; // 把定时器 ID 重置为空
+                    } // 判断结束
+                }, // stopPolling 函数结束
+                isFinalStatus() { // 定义判断任务是否最终状态的函数
+                    if (!this.task) { // 判断任务信息是否不存在
+                        return false; // 没有任务信息时，不认为是最终状态
+                    } // 判断结束
+
+                    const finalStatuses = [ // 定义最终状态列表
+                        "completed", // 已完成
+                        "success", // 成功
+                        "failed", // 失败
+                        "export_failed", // 导出失败
+                    ]; // 最终状态列表结束
+
+                    return finalStatuses.includes(this.task.status); // 判断当前任务状态是否属于最终状态
+                }, // isFinalStatus 函数结束
+
+            }; // 页面状态对象结束
+        } // Alpine.js 页面数据函数结束
+    </script>
+
+</body> <!-- 页面主体结束 -->
+</html> <!-- HTML 页面结束 -->

@@ -1,0 +1,42 @@
+# 环境变量文件，不能进入镜像，避免泄露 API Key、数据库密码、JWT 密钥
+.env
+
+# Python 虚拟环境目录，镜像里会重新安装依赖，不需要复制本地虚拟环境
+.venv/
+venv/
+env/
+
+# Python 缓存文件，属于运行缓存，不需要进入镜像
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 上传文件目录，属于运行时数据，不应该打进镜像
+uploads/
+
+# 导出文件目录，属于运行时数据，不应该打进镜像
+exports/
+
+# 日志目录，属于运行时数据，不应该打进镜像
+logs/
+
+# Git 目录，镜像运行不需要 Git 历史
+.git/
+.gitignore
+
+# 编辑器配置，镜像运行不需要
+.vscode/
+.idea/
+
+# 测试缓存和工具缓存
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# 系统垃圾文件
+.DS_Store
+Thumbs.db
+
+# Docker Compose 本地覆盖文件，如果你后面有这个文件，也不打进镜像
+docker-compose.override.yml

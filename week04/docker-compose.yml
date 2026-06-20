@@ -1,0 +1,65 @@
+services:  # 定义这一组 Docker Compose 要启动的服务
+
+  postgres:  # 定义 PostgreSQL + pgvector 数据库服务，服务名叫 postgres
+    image: pgvector/pgvector:pg16  # 使用带 pgvector 扩展的 PostgreSQL 16 镜像
+    container_name: ai-app-compose-postgres  # 指定数据库容器名称，方便在 Docker Desktop 里查看
+    environment:  # 定义 PostgreSQL 初始化环境变量
+      POSTGRES_USER: postgres  # 数据库用户名
+      POSTGRES_PASSWORD: 123456  # 数据库密码，学习阶段先用 123456
+      POSTGRES_DB: ai_app_pgvector  # 初始化创建的数据库名称
+    ports:  # 定义端口映射
+      - "5434:5432"  # Windows 本机 5434 端口映射到容器内部 5432 端口，避免和旧 ai-pgvector 的 5433 冲突
+    volumes:  # 定义数据卷挂载
+      - postgres_data:/var/lib/postgresql/data  # 把数据库数据保存到 Docker volume，避免容器删除后数据直接丢失
+
+  redis:  # 定义 Redis 服务，服务名叫 redis
+    image: redis:7  # 使用 Redis 7 官方镜像
+    container_name: ai-app-compose-redis  # 指定 Redis 容器名称，方便在 Docker Desktop 里查看
+    ports:  # 定义端口映射
+      - "6380:6379"  # Windows 本机 6380 端口映射到容器内部 6379 端口，避免和旧 ai-redis 的 6379 冲突
+
+  backend:  # 定义 FastAPI 后端服务，服务名叫 backend
+    build: .  # 使用当前目录下的 Dockerfile 构建后端镜像
+    container_name: ai-app-compose-backend  # 指定后端容器名称
+    env_file:  # 指定运行容器时加载环境变量文件
+      - .env  # 读取当前目录下的 .env 文件
+    environment:  # 覆盖部分 .env 里的配置，让它适配 Docker Compose 内部网络
+      DATABASE_URL: postgresql+psycopg://postgres:123456@postgres:5432/ai_app_pgvector  # backend 容器通过 postgres 服务名连接数据库
+      REDIS_URL: redis://redis:6379/0  # backend 容器通过 redis 服务名连接 Redis
+    ports:  # 定义后端端口映射
+      - "8000:8000"  # Windows 本机 8000 端口映射到 backend 容器内部 8000 端口
+    volumes:  # 定义运行时目录挂载
+      - ./uploads:/app/uploads  # 把本机 uploads 目录挂载到容器 /app/uploads，保存上传文件
+      - ./exports:/app/exports  # 把本机 exports 目录挂载到容器 /app/exports，保存导出文件
+      - ./logs:/app/logs  # 把本机 logs 目录挂载到容器 /app/logs，保存日志文件
+    depends_on:  # 定义 backend 启动顺序依赖
+      - postgres  # 先启动 postgres 容器
+      - redis  # 先启动 redis 容器
+  worker:  # 定义 RQ Worker 后台任务服务，服务名叫 worker
+    build: .  # 使用当前目录下的 Dockerfile 构建 worker 镜像，和 backend 使用同一份代码
+    container_name: ai-app-compose-worker  # 指定 worker 容器名称，方便在 Docker Desktop 里查看
+    env_file:  # 指定运行 worker 容器时加载环境变量文件
+      - .env  # 读取当前目录下的 .env 文件，获取 LLM、Embedding、JWT 等配置
+    environment:  # 覆盖 .env 里的部分配置，让 worker 适配 Docker Compose 内部网络
+      DATABASE_URL: postgresql+psycopg://postgres:123456@postgres:5432/ai_app_pgvector  # worker 通过 postgres 服务名连接数据库
+      REDIS_URL: redis://redis:6379/0  # worker 通过 redis 服务名连接 Redis 队列
+    volumes:  # 定义运行时目录挂载
+      - ./uploads:/app/uploads  # 把本机 uploads 目录挂载到 worker 容器，方便读取上传文件
+      - ./exports:/app/exports  # 把本机 exports 目录挂载到 worker 容器，方便写入导出报告
+      - ./logs:/app/logs  # 把本机 logs 目录挂载到 worker 容器，方便保存日志
+    depends_on:  # 定义 worker 启动顺序依赖
+      - postgres  # 先启动 postgres 容器
+      - redis  # 先启动 redis 容器
+    command: ["python", "scripts/run_simple_worker.py"]  # 覆盖 Dockerfile 默认 CMD，让这个容器运行 RQ Worker 脚本
+  nginx:  # 定义 Nginx 反向代理服务，服务名叫 nginx
+    image: nginx:1.27-alpine  # 使用轻量版 Nginx 镜像
+    container_name: ai-app-compose-nginx  # 指定 Nginx 容器名称，方便在 Docker Desktop 里查看
+    ports:  # 定义端口映射
+      - "80:80"  # Windows 本机 80 端口映射到 Nginx 容器内部 80 端口
+    volumes:  # 定义挂载目录和配置文件
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro  # 挂载 Nginx 配置文件，ro 表示只读
+      - ./frontend:/usr/share/nginx/html:ro  # 把本机 frontend 目录挂载到 Nginx 默认静态文件目录
+    depends_on:  # 定义 Nginx 启动顺序依赖
+      - backend  # 先启动 backend，Nginx 再转发请求给 backend
+volumes:  # 定义 Docker volume
+  postgres_data:  # 定义 PostgreSQL 数据卷，用来持久化数据库数据

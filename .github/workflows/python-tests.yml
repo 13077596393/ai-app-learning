@@ -1,0 +1,47 @@
+name: Python Tests # GitHub Actions 工作流名称
+
+on: # 定义触发条件
+  push: # push 代码时触发
+    branches: # 指定分支
+      - main # main 分支
+      - master # master 分支
+  pull_request: # Pull Request 时触发
+    branches: # 指定 PR 目标分支
+      - main # main 分支
+      - master # master 分支
+
+jobs: # 定义任务
+  test: # 任务名称
+    runs-on: ubuntu-latest # 使用 Ubuntu 云端环境
+
+    defaults: # 设置默认运行目录
+      run: # run 命令默认配置
+        working-directory: week04 # 所有命令默认在 week04 目录下执行
+
+    steps: # 任务步骤
+      - name: Checkout repository # 拉取仓库代码
+        uses: actions/checkout@v4 # 使用官方 checkout action
+
+      - name: Set up Python # 安装 Python
+        uses: actions/setup-python@v5 # 使用官方 Python action
+        with: # 设置 Python 参数
+          python-version: "3.11" # 使用 Python 3.11
+
+      - name: Install dependencies # 安装依赖
+        run: | # 多行命令
+          python -m pip install --upgrade pip  # 升级 pip
+          pip install -r requirements.txt  # 安装项目运行依赖
+          pip install -r requirements-dev.txt  # 安装测试依赖
+
+      - name: Run tests # 运行不依赖真实外部服务的测试
+        run: | # 多行命令
+          pytest \
+            tests/test_rerank_service.py \
+            tests/test_text_splitter.py \
+            tests/test_rag_service.py \
+            tests/test_eval_service.py \
+            tests/test_prompt_security_service.py \
+            tests/test_eval_mock_service.py \
+            tests/test_document_index_mock_embedding.py \
+            tests/test_rag_chat_mock_service.py \
+            -v
